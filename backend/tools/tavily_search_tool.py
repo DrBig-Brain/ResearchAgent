@@ -6,7 +6,15 @@ from langchain_groq import ChatGroq
 
 @tool
 def TavilySearchTool(query : str):
-    """This is tool is to be used when the llm or you need to access the internet for context regarding the research and provide the user with the proper structured and complete response"""
+    """This is a web search tool and is to be used the llm needs to access the internet for information.
+
+        Args:
+            query : Internet search request for relevant information.
+        Returns:
+            a JSON with fields title, url and content relevant to the search query.
+        Raises:
+            Null
+    """
     load_dotenv()
     search = TavilySearch(
         max_result = 3,

@@ -6,7 +6,7 @@ import psycopg2
 from psycopg2.errors import Error
 
 @tool
-def sql_query_tool(query : str):
+def SqlQueryTool(query : str):
     """SQL QUERY TOOL
         Use This tool to fetch the data about comapnies performance from a local postgresql database
         from the table company_performance with columns as given below:
