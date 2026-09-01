@@ -4,7 +4,7 @@ from services.llm_service import llm_with_tools
 from langgraph.graph import StateGraph, START, END
 from tools.tavily_search_tool import TavilySearchTool
 from tools.db_query_tool import SqlQueryTool
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import ToolMessage, HumanMessage
 
 def llm_node(state : AgentState) -> AgentState:
 
@@ -28,7 +28,7 @@ def tool_node(state : AgentState) -> AgentState:
     messages = state['messages']
 
     tools = [SqlQueryTool, TavilySearchTool]
-    tool_by_name = {tools.name : tool for tool in tools}
+    tool_by_name = {tool.name : tool for tool in tools}
 
     tool_results = []
 
@@ -47,7 +47,7 @@ def if_tool_call(state : AgentState) -> str:
     if last_message.tool_calls:
         return "tool_node"
     else:
-        "end"
+        return "end"
 
 graph = StateGraph(AgentState)
 
@@ -62,9 +62,6 @@ graph.add_edge("llm_node",END)
 ReactAgent = graph.compile()
 
 if __name__ == "__main__":
-    png_bytes = ReactAgent.get_graph().draw_mermaid_png()
-    
-    with open("graph.png", "wb") as f:
-        f.write(png_bytes)
-        
-    print("Graph successfully saved as 'graph.png'")
+    response = ReactAgent.invoke({"messages":HumanMessage(content = ["who is the current CEO of Apple ?"])})
+    messages = response["messages"]
+    print(messages[-1].content)

@@ -39,7 +39,7 @@ def SqlQueryTool(query : str):
     """
     load_dotenv()
     db_config = {
-        "db_name": "company_performance",
+        "database": "companies",
         "user": "user",
         "password": os.getenv("DB_PASSWORD"),
         "host": os.getenv("HOST"),
@@ -47,7 +47,7 @@ def SqlQueryTool(query : str):
     }
     try:
         with psycopg2.connect(**db_config) as conn:
-            with conn.cursor as cur:    
+            with conn.cursor() as cur:    
                 cur.execute(query)
                 print("query executed successfully")
                 rows = cur.fetchall()
