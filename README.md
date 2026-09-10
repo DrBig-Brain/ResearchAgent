@@ -1,361 +1,200 @@
-# 🧠 Autonomous Multi-Source Research Agent
+# 🧠 ResearchAgent
 
-An intelligent, self-correcting research agent that fuses structured database queries with live web search to produce schema-validated, Markdown-formatted research reports — all driven by natural language.
+ResearchAgent is a multi-service research assistant that turns natural-language questions into structured research workflows. The system combines a user-data management service, a backend service for database connection intake, and an agent service that performs reasoning, planning, tool calling, and response synthesis.
+
+The project is designed around a clear separation of responsibilities:
+
+- The TypeScript user-service manages user profiles and user-level data.
+- The backend-service collects the PostgreSQL address, password, and database name from the user and forwards that configuration to the agent layer.
+- The agent-service remains the execution brain of the system: it reasons, chooses tools, runs database queries, calls the web search tool, and shapes the final research output.
+- PostgreSQL is not provisioned by the platform. The user provides their own cloud PostgreSQL instance, and the backend service receives the connection information from that instance.
 
 ---
 
 ## 📌 Problem Statement
 
-Modern knowledge work requires synthesizing information from radically different data sources — structured databases, live web content, and conversational context — and presenting it in a clean, reliable format.
+Research teams often need to answer questions that require more than one type of evidence:
 
-A query like:
+- Structured information from a database
+- Fresh public information from the web
+- Conversation context and user preferences
 
-> *"Compare the Q3 2024 financial performance of Apple and Microsoft, cross-reference it with recent tech news, and return a ranked Markdown summary table"*
-
-…used to require manual database querying, multi-source browsing, data reconciliation, and hand-formatting. This agent does all of that autonomously.
+Manual research is slow and error-prone. ResearchAgent coordinates these sources through a service-oriented architecture and gives the user a natural-language research experience.
 
 ---
 
-## 🎯 What It Does
+## 🎯 What the System Does
 
 | Capability | Description |
 |---|---|
-| 🤖 Thinks before acting | Uses a ReAct loop to plan which tools to call and in what order |
-| 🗄️ Reads structured data | Queries a PostgreSQL database using natural language → SQL |
-| 🌐 Reads unstructured data | Fetches live web search results via Tavily Search API |
-| 🔗 Fuses both sources | Synthesizes SQL rows + web snippets into a single coherent response |
-| 📐 Guarantees output shape | Enforces a strict Pydantic schema so output is always predictable |
-| 🧠 Remembers context | Maintains conversational memory across multi-turn queries |
-| 🔁 Self-corrects | Detects tool failures and retries or falls back gracefully |
+| 🧠 Reasoning loop | Uses a ReAct-style agent loop to decide which tools to call and in what order |
+| 🗄️ Structured research | Queries PostgreSQL using natural language through the agent service |
+| 🌐 Live research | Uses Tavily search for current web evidence |
+| 👤 User data | Stores and manages user data through the user-service in TypeScript |
+| 🧾 Database configuration | Backend-service accepts PostgreSQL address, password, and database name from the user |
+| 📄 Output synthesis | Returns a clean, schema-shaped research answer |
 
 ---
 
 ## 🏗️ Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        USER INTERFACE                           │
-│              (Streamlit Web App / Terminal CLI)                  │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │  Natural Language Query
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     LANGGRAPH ORCHESTRATOR                       │
-│                                                                  │
-│   ┌──────────┐    ┌──────────────┐    ┌──────────────────────┐  │
-│   │  PLAN    │───▶│  TOOL CALL   │───▶│  EVALUATE / REFLECT  │  │
-│   │  Node    │    │  Node        │    │  Node                │  │
-│   └──────────┘    └──────────────┘    └──────────┬───────────┘  │
-│        ▲                                          │              │
-│        └──────────── Retry Loop ─────────────────┘              │
-│                                                  │              │
-│                                                  ▼              │
-│                                        ┌─────────────────┐      │
-│                                        │  FINALIZE Node  │      │
-│                                        └─────────────────┘      │
-└─────────────────────────────────────────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-   ┌─────────────┐ ┌────────────┐ ┌─────────────────┐
-   │ PostgreSQL  │ │ Tavily Web │ │  Chat Memory    │
-   │  Database   │ │  Search    │ │  (Checkpointer) │
-   └─────────────┘ └────────────┘ └─────────────────┘
-          │               │
-          └───────┬───────┘
-                  ▼
-        ┌──────────────────┐
-        │  Pydantic Output │
-        │  Parser / Schema │
-        └──────────────────┘
-                  │
-                  ▼
-        ┌──────────────────┐
-        │  Final Response  │
-        │  (JSON/Markdown) │
-        └──────────────────┘
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                         APP / CLIENT                          │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    USER-SERVICE (TypeScript)                  │
+│      Stores and manages user profile and user-level data     │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────────────┐
+│                 BACKEND-SERVICE (TypeScript)                  │
+│ Collects PostgreSQL details from the user:                   │
+│   - database host / address                                   │
+│   - password                                                  │
+│   - database name                                              │
+│ It does not host PostgreSQL for the user.                    │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    AGENT-SERVICE (Python)                     │
+│ Executes the reasoning workflow and calls tools              │
+│ - ReAct agent planning                                       │
+│ - DB query tool                                               │
+│ - Tavily web search tool                                      │
+│ - Output formatting and synthesis                             │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   USER-PROVIDED CLOUD POSTGRES                 │
+│      The user supplies the address, password, and db name     │
+│      from their own PostgreSQL cloud instance                 │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚙️ Tech Stack
+## ⚙️ Service Responsibilities
 
-| Layer | Technology |
-|---|---|
-| Orchestration | LangGraph |
-| LLM | OpenAI GPT-4o / Anthropic Claude |
-| Agent Pattern | ReAct (Reasoning + Acting) |
-| Structured DB | **PostgreSQL** + SQLDatabaseChain |
-| Live Search | Tavily Search API |
-| Output Parsing | Pydantic v2 + `.with_structured_output()` |
-| Memory | LangGraph SqliteSaver |
-| UI | Streamlit / Rich CLI |
-| Testing | pytest |
+### 1. User Service
+
+The user-service is a TypeScript service responsible for creating and managing user records, authentication-related profile information, and any user-centered metadata required by the application.
+
+### 2. Backend Service
+
+The backend-service is responsible for collecting the PostgreSQL connection information from the user:
+
+- PostgreSQL database address / host
+- Password
+- Database name
+
+This backend layer should never create or host a PostgreSQL instance for the user. It is only the intake and configuration surface that receives the user’s own cloud database credentials.
+
+### 3. Agent Service
+
+The agent-service is the orchestration and intelligence layer. It should be used for what it is best fitted for:
+
+- receiving user queries
+- reasoning over the request
+- deciding which tools to call
+- calling the database query tool against the user-provided PostgreSQL endpoint
+- calling the Tavily web search tool
+- composing the final research answer
+
+The agent-service should not be repurposed to manage user data or to host the database experience for the end user.
 
 ---
 
-## 📁 Project Structure
+## 📁 Repository Structure
 
-```
+```text
 research-agent/
-│
-├── main.py                    # Entry point (CLI or Streamlit launcher)
-│
-├── agent/
-│   ├── graph.py               # LangGraph state machine definition
-│   ├── state.py               # AgentState TypedDict schema
-│   ├── nodes.py               # plan_node, tool_node, evaluate_node, finalize_node
-│   └── prompts.py             # System prompt + ReAct template
-│
-├── tools/
-│   ├── sql_tool.py            # PostgreSQL query wrapper + @tool
-│   ├── web_search_tool.py     # Tavily API wrapper + @tool
-│   └── calculator_tool.py     # Safe math evaluator + @tool
-│
-├── database/
-│   ├── schema.sql             # PostgreSQL table definitions
-│   └── seed_data.py           # Script to populate DB with sample data
-│
-├── schemas/
-│   └── output_schema.py       # Pydantic ResearchReport + CompanyMetric
-│
-├── memory/
-│   └── checkpointer.py        # SqliteSaver or MemorySaver setup
-│
-├── ui/
-│   ├── streamlit_app.py       # Streamlit web interface
-│   └── cli_app.py             # Rich terminal interface
-│
-├── tests/
-│   ├── test_tools.py          # Unit tests for each tool
-│   ├── test_graph.py          # Integration tests for graph flow
-│   └── test_output_schema.py  # Pydantic validation tests
-│
-├── .env                       # API keys (never commit this)
-├── .env.example               # Template for required env vars
-├── requirements.txt           # All dependencies
+├── app/                      # User-facing application surface
+├── backend/
+│   ├── user-service/         # TypeScript user-data management service
+│   ├── backend-service/      # TypeScript service that collects PostgreSQL credentials
+│   ├── agent_service/         # Python agent engine, ReAct loop, tools, and server
+│   └── database-service/     # Optional database-related support service or artifacts
 └── README.md
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🔧 Environment and Runtime Contract
 
-### 1. Prerequisites
+The platform expects the following runtime contract:
 
-- Python 3.11+
-- PostgreSQL 15+ (running locally or via a managed service)
-- A [Tavily API key](https://tavily.com)
-- An OpenAI or Anthropic API key
+1. A user registers or signs in through the TypeScript user-service.
+2. The user provides a PostgreSQL cloud instance address, password, and database name through the backend-service.
+3. The backend-service passes that configuration into the agent-service workflow.
+4. The agent-service uses the configured database connection and Tavily API access to produce research output.
 
-### 2. Clone the Repository
+The PostgreSQL instance is external and must be supplied by the user or an infrastructure owner. ResearchAgent does not host or provision PostgreSQL for the end user.
+
+---
+
+## 🚀 Local Development
+
+### Prerequisites
+
+- Node.js for the TS services
+- Python 3.11+ for the agent service
+- Access to a cloud PostgreSQL instance
+- A Tavily API key
+- An LLM provider API key
+
+### Service Startup
+
+The TypeScript services should be started from their respective folders:
 
 ```bash
-git clone https://github.com/DrBig-Brain/research-agent.git
-cd research-agent
+cd backend/user-service
+npm install
+npm run dev
 ```
 
-### 3. Set Up a Virtual Environment
-
 ```bash
-python -m venv venv
-source venv/bin/activate        # On Windows: venv\Scripts\activate
+cd backend/backend-service
+npm install
+npm run dev
 ```
 
-### 4. Install Dependencies
+The Python agent service should remain the execution service:
 
 ```bash
+cd backend/agent_service
 pip install -r requirements.txt
-```
-
-### 5. Configure Environment Variables
-
-Copy the example env file and fill in your credentials:
-
-```bash
-cp .env.example .env
-```
-
-```env
-# .env
-
-# LLM Provider (use one)
-OPENAI_API_KEY=your_openai_key_here
-ANTHROPIC_API_KEY=your_anthropic_key_here
-
-# Tavily Web Search
-TAVILY_API_KEY=your_tavily_key_here
-
-# PostgreSQL Connection
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=research_agent
-POSTGRES_USER=your_pg_user
-POSTGRES_PASSWORD=your_pg_password
-```
-
-### 6. Set Up the PostgreSQL Database
-
-Make sure your PostgreSQL server is running, then create the database and seed it:
-
-```bash
-# Create the database
-psql -U your_pg_user -c "CREATE DATABASE research_agent;"
-
-# Apply the schema
-psql -U your_pg_user -d research_agent -f database/schema.sql
-
-# Seed with sample data
-python database/seed_data.py
-```
-
-The `earnings` table schema looks like this:
-
-```sql
-CREATE TABLE earnings (
-    id           SERIAL PRIMARY KEY,
-    company      TEXT NOT NULL,
-    quarter      TEXT NOT NULL,
-    revenue_bn   NUMERIC(10, 2),
-    net_income_bn NUMERIC(10, 2),
-    eps          NUMERIC(6, 2),
-    yoy_growth   NUMERIC(6, 2)
-);
+python server.py
 ```
 
 ---
 
-## ▶️ Running the Agent
+## 🧪 Testing
 
-### Streamlit Web UI
+The testing strategy should validate the separation of responsibilities:
 
-```bash
-streamlit run ui/streamlit_app.py
-```
-
-Then open [http://localhost:8501](http://localhost:8501) in your browser.
-
-### Terminal CLI
-
-```bash
-python main.py
-```
-
----
-
-## 💡 Example Query
-
-```
-> Compare Q3 2024 earnings of Apple vs Microsoft with recent analyst news
-```
-
-**What happens under the hood:**
-
-1. `plan_node` — LLM decides to call both `sql_query_tool` and `web_search_tool` in parallel
-2. `sql_query_tool` — translates the query to SQL, hits PostgreSQL, returns revenue/EPS rows
-3. `web_search_tool` — fetches top 5 Tavily results with analyst commentary
-4. `evaluate_node` — confirms data is sufficient, no retry needed
-5. `finalize_node` — calls `.with_structured_output(ResearchReport)` to enforce the Pydantic schema
-
-**Sample output:**
-
-```markdown
-| Company   | Revenue  | Net Income | EPS  | YoY Growth | Sentiment |
-|-----------|----------|------------|------|------------|-----------|
-| Apple     | $94.9B   | $21.7B     | 1.46 | +5.8%      | Positive  |
-| Microsoft | $65.6B   | $22.3B     | 3.30 | +16.0%     | Positive  |
-
-**Summary:** Microsoft outpaced Apple in net income and YoY growth in Q3 2024...
-
-**Recommendation:** Microsoft shows stronger earnings momentum heading into Q4.
-
-**Sources:** [reuters.com/...], [bloomberg.com/...]
-```
-
----
-
-## 🧩 Output Schema
-
-Every response is validated against a strict Pydantic schema — no hallucinated fields, no missing data.
-
-```python
-class CompanyMetric(BaseModel):
-    company: str
-    revenue_bn: float
-    net_income_bn: float
-    eps: float
-    yoy_growth_pct: float
-    news_summary: str
-    analyst_sentiment: str  # "Positive" | "Neutral" | "Negative"
-
-class ResearchReport(BaseModel):
-    query: str
-    companies: List[CompanyMetric]
-    comparison_summary: str
-    recommendation: str
-    sources: List[str]
-    generated_at: str       # ISO 8601 timestamp
-```
-
----
-
-## 🔄 Multi-Turn Memory
-
-The agent remembers context across turns within a session:
-
-```
-Turn 1: "Compare Apple and Microsoft Q3 earnings"
-         → Agent fetches both, stores result in checkpointer
-
-Turn 2: "Now add Google to that comparison"
-         → Agent recalls previous context, fetches only Google,
-           merges — no redundant API calls
-```
-
----
-
-## 🧪 Running Tests
-
-```bash
-pytest tests/ -v
-```
-
-| Test File | What It Covers |
-|---|---|
-| `test_tools.py` | Unit tests for each tool in isolation |
-| `test_graph.py` | Integration tests for the full LangGraph flow |
-| `test_output_schema.py` | Pydantic schema validation edge cases |
-
----
-
-## 🚧 Key Engineering Challenges
-
-| Challenge | Solution |
-|---|---|
-| Unstructured + structured data fusion | Agent merges PostgreSQL rows and web snippets via synthesis prompt |
-| Hallucinated output format | `.with_structured_output(ResearchReport)` enforces strict schema |
-| Tool failures / API timeouts | `evaluate_node` detects failures, retry loop (max 3 attempts) |
-| Redundant API calls across turns | LangGraph `SqliteSaver` checkpointer persists state across turns |
-| Natural language → valid SQL | `SQLDatabaseChain` with PostgreSQL dialect awareness |
+- User-service tests verify user data persistence and profile management
+- Backend-service tests verify credential intake and validation behavior
+- Agent-service tests verify tool calling, the reasoning loop, database query execution, and final response composition
 
 ---
 
 ## 🤝 Contributing
 
-Pull requests are welcome! For major changes, please open an issue first.
+Contributions are welcome. Please keep the architecture boundaries clear:
 
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Commit your changes (`git commit -m 'Add your feature'`)
-4. Push to the branch (`git push origin feature/your-feature`)
-5. Open a Pull Request
+- Do not move user-data management into the agent service
+- Do not let the agent service become a credentials intake or database provisioning layer
+- Keep the backend-service focused on asking the user for PostgreSQL connection details
+- Make the agent-service remain the reasoning and execution engine
 
 ---
 
 ## 📄 License
 
-MIT License. See [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">Built with LangGraph · PostgreSQL · Tavily · Pydantic</p>
+MIT License. See the license file in the repository for details.

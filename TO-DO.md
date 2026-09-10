@@ -7,9 +7,9 @@
   - [x] sql query tool
   - [x] graph
   - [ ] write test
-- [ ] user-service
+- [ ] user-service (TS)
   - [ ]  TBD
-- [ ] database-service
+- [ ] database-service(TS)
   - [ ] TBD
 - [ ] Front-end
   - [ ] TBD
